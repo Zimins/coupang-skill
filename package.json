@@ -1,18 +1,42 @@
 {
-  "name": "coupang-cli",
+  "name": "cpcli",
   "version": "1.0.0",
-  "description": "Coupang CLI tool powered by Playwright - 브라우저 자동화로 쿠팡 쇼핑",
+  "description": "Playwright 기반 쿠팡 쇼핑 자동화 CLI — 검색, 장바구니, 주문/결제를 터미널에서",
   "type": "module",
   "bin": {
-    "coupang": "./dist/cli.js"
+    "cpcli": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "skills"
+  ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "postinstall": "npx playwright install chromium || true",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js"
   },
-  "keywords": ["coupang", "cli", "playwright", "shopping"],
+  "keywords": [
+    "coupang",
+    "쿠팡",
+    "cli",
+    "playwright",
+    "shopping",
+    "automation",
+    "쇼핑",
+    "자동화"
+  ],
+  "author": "Zimin",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Zimins/coupang-cli.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "commander": "^13.1.0",
     "chalk": "^5.4.1",

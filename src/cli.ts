@@ -3,7 +3,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { login, checkLoginStatus } from "./login.js";
-import { search } from "./search.js";
+import { search, searchAndAddToCart, searchAndOrder } from "./search.js";
 import { orderByUrl, orderFromSearch } from "./order.js";
 import { viewCart } from "./cart.js";
 import { clearSession } from "./browser.js";
@@ -11,8 +11,8 @@ import { clearSession } from "./browser.js";
 const program = new Command();
 
 program
-  .name("coupang")
-  .description("쿠팡 CLI - Playwright 기반 쿠팡 쇼핑 도우미")
+  .name("cpcli")
+  .description("cpcli - Playwright 기반 쿠팡 쇼핑 자동화 CLI")
   .version("1.0.0");
 
 // 로그인
@@ -88,6 +88,45 @@ program
   .action(async (url: string) => {
     try {
       await orderByUrl(url);
+    } catch (error) {
+      console.error(chalk.red("주문 중 오류:"), error);
+      process.exit(1);
+    }
+  });
+
+// 검색 후 장바구니 담기 (비인터랙티브)
+program
+  .command("cart-add <query>")
+  .description("상품을 검색하고 장바구니에 담습니다 (비인터랙티브)")
+  .option("-n, --pick <number>", "선택할 상품 번호 (기본: 1)", "1")
+  .action(async (query: string, options: { pick: string }) => {
+    try {
+      const pickIndex = parseInt(options.pick, 10) || 1;
+      const success = await searchAndAddToCart(query, pickIndex);
+      if (!success) {
+        process.exit(1);
+      }
+    } catch (error) {
+      console.error(chalk.red("장바구니 담기 중 오류:"), error);
+      process.exit(1);
+    }
+  });
+
+// 검색 후 바로 주문 (비인터랙티브)
+program
+  .command("order-now <query>")
+  .description("상품을 검색하고 바로 주문합니다 (비인터랙티브)")
+  .option("-n, --pick <number>", "선택할 상품 번호 (기본: 1)", "1")
+  .option("-p, --payment <method>", "결제 수단: coupay 또는 card (기본: coupay)", "coupay")
+  .action(async (query: string, options: { pick: string; payment: string }) => {
+    try {
+      const pickIndex = parseInt(options.pick, 10) || 1;
+      const payment = options.payment === "card" ? "card" as const : "coupay" as const;
+      const success = await searchAndOrder(query, pickIndex, payment);
+      if (!success) {
+        console.error(chalk.red("주문에 실패했습니다. 스크린샷을 확인해주세요."));
+        process.exit(1);
+      }
     } catch (error) {
       console.error(chalk.red("주문 중 오류:"), error);
       process.exit(1);
