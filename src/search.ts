@@ -411,29 +411,29 @@ export async function searchAndAddToCart(query: string, pickIndex = 1): Promise<
     const selected = searchResult.results[Math.min(pickIndex - 1, searchResult.results.length - 1)];
     console.log(chalk.blue(`\n   → ${pickIndex}번 상품 선택: ${selected.name}`));
 
-    // 같은 세션에서 상품 페이지로 이동
+    // 같은 세션에서 상품 페이지로 이동 (currentPage = 쿠팡 탭)
     const fullUrl = selected.url.startsWith("http")
       ? selected.url
       : `https://www.coupang.com${selected.url}`;
 
     await currentPage.goto(fullUrl, { waitUntil: "domcontentloaded" });
     await randomDelay(2000, 3000);
-    await takeScreenshot(page, "05-product-page");
+    await takeScreenshot(currentPage, "05-product-page");
 
-    // 장바구니 담기 버튼 클릭
-    const cartBtn = await page.$(
+    // 장바구니 담기 버튼 클릭 (currentPage에서 찾기)
+    const cartBtn = await currentPage.$(
       'button.prod-btn-cart, button[class*="cart"], .prod-quantity-cart-button button, ' +
       'button:has-text("장바구니"), [class*="addToCart"] button',
     );
 
     if (!cartBtn) {
       // 대체: 장바구니 텍스트가 포함된 버튼 찾기
-      const altBtn = await page.$('button >> text=장바구니');
+      const altBtn = await currentPage.$('button >> text=장바구니');
       if (altBtn) {
         await altBtn.click();
       } else {
         console.log(chalk.red("   장바구니 버튼을 찾을 수 없습니다."));
-        await takeScreenshot(page, "05-no-cart-btn");
+        await takeScreenshot(currentPage, "05-no-cart-btn");
         return false;
       }
     } else {
@@ -441,7 +441,7 @@ export async function searchAndAddToCart(query: string, pickIndex = 1): Promise<
     }
 
     await randomDelay(2000, 3000);
-    await takeScreenshot(page, "06-after-cart");
+    await takeScreenshot(currentPage, "06-after-cart");
     await saveSession(context);
 
     console.log(chalk.green("\n   ✅ 장바구니에 담았습니다!"));
