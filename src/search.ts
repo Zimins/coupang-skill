@@ -94,46 +94,185 @@ async function tryAutoLogin(page: Page, context: BrowserContext): Promise<boolea
   }
 }
 
+/** Access Denied 여부 확인 */
+async function isAccessDenied(page: Page): Promise<boolean> {
+  try {
+    const text = await page.evaluate(() => document.body.innerText.slice(0, 500));
+    return text.includes("Access Denied") || text.includes("403");
+  } catch {
+    return false;
+  }
+}
+
+/** 검색엔진 경유 전략 정의 */
+interface NavigationStrategy {
+  name: string;
+  execute: (page: Page) => Promise<Page>;
+}
+
+function createNaverStrategy(): NavigationStrategy {
+  return {
+    name: "네이버",
+    execute: async (page: Page) => {
+      await page.goto("https://www.naver.com/", { waitUntil: "domcontentloaded" });
+      await randomDelay(1000, 2000);
+
+      const searchInput = await page.$('input#query, input[name="query"]');
+      if (searchInput) {
+        await searchInput.click();
+        await randomDelay(300, 600);
+        await searchInput.fill("쿠팡");
+        await randomDelay(300, 500);
+        await page.keyboard.press("Enter");
+        await randomDelay(2000, 3000);
+      }
+
+      const coupangLink = await page.$('a[href="https://www.coupang.com/"]');
+      if (coupangLink) {
+        const [newPage] = await Promise.all([
+          page.context().waitForEvent("page", { timeout: 10_000 }).catch(() => null),
+          coupangLink.click(),
+        ]);
+        if (newPage) {
+          await newPage.waitForLoadState("domcontentloaded");
+          return newPage;
+        }
+      } else {
+        await page.goto("https://www.coupang.com/", { waitUntil: "domcontentloaded" });
+      }
+      return page;
+    },
+  };
+}
+
+function createGoogleStrategy(): NavigationStrategy {
+  return {
+    name: "Google",
+    execute: async (page: Page) => {
+      await page.goto("https://www.google.com/", { waitUntil: "domcontentloaded" });
+      await randomDelay(1000, 2000);
+
+      const searchInput = await page.$('textarea[name="q"], input[name="q"]');
+      if (searchInput) {
+        await searchInput.click();
+        await randomDelay(300, 600);
+        await searchInput.fill("쿠팡 coupang.com");
+        await randomDelay(300, 500);
+        await page.keyboard.press("Enter");
+        await randomDelay(2000, 3000);
+      }
+
+      const coupangLink = await page.$('a[href*="coupang.com"]');
+      if (coupangLink) {
+        const [newPage] = await Promise.all([
+          page.context().waitForEvent("page", { timeout: 10_000 }).catch(() => null),
+          coupangLink.click(),
+        ]);
+        if (newPage) {
+          await newPage.waitForLoadState("domcontentloaded");
+          return newPage;
+        }
+      } else {
+        await page.goto("https://www.coupang.com/", {
+          waitUntil: "domcontentloaded",
+          referer: "https://www.google.com/",
+        });
+      }
+      return page;
+    },
+  };
+}
+
+function createDaumStrategy(): NavigationStrategy {
+  return {
+    name: "Daum",
+    execute: async (page: Page) => {
+      await page.goto("https://www.daum.net/", { waitUntil: "domcontentloaded" });
+      await randomDelay(1000, 2000);
+
+      const searchInput = await page.$('input#q, input[name="q"]');
+      if (searchInput) {
+        await searchInput.click();
+        await randomDelay(300, 600);
+        await searchInput.fill("쿠팡");
+        await randomDelay(300, 500);
+        await page.keyboard.press("Enter");
+        await randomDelay(2000, 3000);
+      }
+
+      const coupangLink = await page.$('a[href*="coupang.com"]');
+      if (coupangLink) {
+        const [newPage] = await Promise.all([
+          page.context().waitForEvent("page", { timeout: 10_000 }).catch(() => null),
+          coupangLink.click(),
+        ]);
+        if (newPage) {
+          await newPage.waitForLoadState("domcontentloaded");
+          return newPage;
+        }
+      } else {
+        await page.goto("https://www.coupang.com/", {
+          waitUntil: "domcontentloaded",
+          referer: "https://www.daum.net/",
+        });
+      }
+      return page;
+    },
+  };
+}
+
+function createDirectStrategy(): NavigationStrategy {
+  return {
+    name: "직접 접근",
+    execute: async (page: Page) => {
+      await page.goto("https://www.coupang.com/", {
+        waitUntil: "domcontentloaded",
+      });
+      return page;
+    },
+  };
+}
+
 export async function navigateToCoupangViaSearch(page: Page): Promise<Page> {
-  // 1. 네이버 이동
-  console.log(chalk.gray("   네이버로 이동..."));
-  await page.goto("https://www.naver.com/", { waitUntil: "domcontentloaded" });
-  await randomDelay(1000, 2000);
+  const strategies: NavigationStrategy[] = [
+    createNaverStrategy(),
+    createGoogleStrategy(),
+    createDaumStrategy(),
+    createDirectStrategy(),
+  ];
 
-  // 2. 네이버에서 "쿠팡" 검색 (브라우저 히스토리/referrer 생성 목적)
-  const naverSearchInput = await page.$('input#query, input[name="query"]');
-  if (naverSearchInput) {
-    await naverSearchInput.click();
-    await randomDelay(300, 600);
-    await naverSearchInput.fill("쿠팡");
-    await randomDelay(300, 500);
-    await page.keyboard.press("Enter");
-    await randomDelay(2000, 3000);
-    await takeScreenshot(page, "01-naver-search-coupang");
-    console.log(chalk.gray("   네이버 검색 완료, 쿠팡으로 이동..."));
-  }
+  for (const strategy of strategies) {
+    console.log(chalk.gray(`   ${strategy.name} 경유로 쿠팡 이동 시도...`));
+    try {
+      const resultPage = await strategy.execute(page);
+      await randomDelay(2000, 3000);
 
-  // 3. 네이버 검색 결과에서 쿠팡 링크 클릭
-  const coupangLink = await page.$('a[href="https://www.coupang.com/"]');
-  if (coupangLink) {
-    console.log(chalk.gray("   네이버에서 쿠팡 링크 클릭..."));
-    const [newPage] = await Promise.all([
-      page.context().waitForEvent("page", { timeout: 10_000 }).catch(() => null),
-      coupangLink.click(),
-    ]);
-    if (newPage) {
-      await newPage.waitForLoadState("domcontentloaded");
-      page = newPage;
+      if (await isAccessDenied(resultPage)) {
+        console.log(chalk.yellow(`   ⚠ ${strategy.name} 경유 Access Denied. 다음 전략 시도...`));
+        await takeScreenshot(resultPage, `nav-denied-${strategy.name}`);
+        // 다음 전략을 위해 원래 page로 돌아감
+        if (resultPage !== page) {
+          try { await resultPage.close(); } catch { /* ignore */ }
+        }
+        await randomDelay(3000, 5000);
+        continue;
+      }
+
+      await takeScreenshot(resultPage, "02-coupang-home");
+      console.log(chalk.gray(`   쿠팡 진입 성공 (${strategy.name}): ${resultPage.url()}`));
+      return resultPage;
+    } catch (e) {
+      console.log(chalk.yellow(`   ⚠ ${strategy.name} 경유 실패: ${e}`));
+      await randomDelay(2000, 3000);
+      continue;
     }
-  } else {
-    // fallback: 직접 이동
-    console.log(chalk.gray("   쿠팡 링크 미발견, 직접 이동..."));
-    await page.goto("https://www.coupang.com/", { waitUntil: "domcontentloaded" });
   }
 
+  // 모든 전략 실패 시 마지막으로 직접 이동
+  console.log(chalk.red("   모든 진입 전략 실패. 직접 접근으로 진행합니다."));
+  await page.goto("https://www.coupang.com/", { waitUntil: "domcontentloaded" });
   await randomDelay(2000, 3000);
   await takeScreenshot(page, "02-coupang-home");
-  console.log(chalk.gray(`   쿠팡 진입: ${page.url()}`));
   return page;
 }
 
